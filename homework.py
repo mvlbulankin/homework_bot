@@ -45,7 +45,6 @@ HOMEWORK_STATUSES = {
 
 def send_message(bot, message):
     """Sends a message to Telegram chat."""
-
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info("Chat message {TELEGRAM_CHAT_ID}: {message}")
@@ -55,7 +54,6 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp):
     """Makes a request to a single API service endpoint."""
-
     timestamp = current_timestamp or int(time.time())
     params = {"from_date": timestamp}
     try:
@@ -78,7 +76,6 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Checks the API response for correctness."""
-
     if type(response) is not dict:
         raise TypeError("API response is different from dict")
     try:
@@ -96,7 +93,6 @@ def check_response(response):
 
 def parse_status(homework):
     """Parses the status of this homework."""
-
     if type(homework) is dict:
         homework_name = homework.get("homework_name")
         homework_status = homework.get("status")
@@ -112,7 +108,6 @@ def parse_status(homework):
 
 def check_tokens():
     """Checks the availability of environment variables."""
-
     if PRACTICUM_TOKEN and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
         return True
     return False
@@ -120,7 +115,6 @@ def check_tokens():
 
 def main():
     """The main logic of the bot."""
-
     status = ""
     error_cache_message = ""
     bot = Bot(token=TELEGRAM_TOKEN)
