@@ -1,32 +1,18 @@
+from http import HTTPStatus
+from requests import HTTPError
 import logging
 import os
 import requests
 import time
 
 from dotenv import load_dotenv
-from http import HTTPStatus
-from logging.handlers import RotatingFileHandler
 from telegram import Bot
 
-from exceptions import ErrorSendException
+from exceptions import EnvironmentsMissingException, ErrorSendException
+from logger import logger
+
 
 load_dotenv()
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename="main.log",
-    format="%(funcName)s, %(lineno)s, %(levelname)s, %(message)s",
-    filemode="w",
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler(
-    "my_logger.log", encoding="UTF-8", maxBytes=50000000, backupCount=5
-)
-logger.addHandler(handler)
-formatter = logging.Formatter(
-    "%(asctime)s, %(levelname)s, %(message)s, %(funcName)s, %(lineno)s"
-)
-handler.setFormatter(formatter)
 
 PRACTICUM_TOKEN = os.getenv("PRACTICUM_TOKEN")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -36,7 +22,7 @@ RETRY_TIME = 600
 ENDPOINT = "https://practicum.yandex.ru/api/user_api/homework_statuses/"
 HEADERS = {"Authorization": f"OAuth {PRACTICUM_TOKEN}"}
 
-HOMEWORK_STATUSES = {
+HOMEWORK_VERDICTS = {
     "approved": "Работа проверена: ревьюеру всё понравилось. Ура!",
     "reviewing": "Работа взята на проверку ревьюером.",
     "rejected": "Работа проверена: у ревьюера есть замечания.",
@@ -50,6 +36,8 @@ def send_message(bot, message):
         logger.info("Chat message {TELEGRAM_CHAT_ID}: {message}")
     except ErrorSendException:
         logger.error("Error sending message to telegram")
+        logger.critical("Critical error sending message to telegram")
+        raise ErrorSendException("Error sending message to telegram")
 
 
 def get_api_answer(current_timestamp):
@@ -62,53 +50,52 @@ def get_api_answer(current_timestamp):
         )
     except Exception as error:
         logging.error(f"Error requesting the main API: {error}")
-        raise Exception(f"Error requesting the main API: {error}")
+        logger.critical(f"Critical error requesting the main API: {error}")
+        raise HTTPError(f"Error requesting the main API: {error}")
     if homework_statuses.status_code != HTTPStatus.OK:
         status_code = homework_statuses.status_code
         logging.error(f"Ошибка {status_code}")
-        raise Exception(f"Ошибка {status_code}")
-    try:
-        return homework_statuses.json()
-    except ValueError:
-        logger.error("Error parsing response from json")
-        raise ValueError("Error parsing response from json")
+        logger.critical(f"Critical error {status_code}")
+        raise HTTPError(f"Ошибка {status_code}")
+    return homework_statuses.json()
 
 
 def check_response(response):
     """Checks the API response for correctness."""
-    if type(response) is not dict:
+    if not isinstance(response, dict):
         raise TypeError("API response is different from dict")
-    try:
+    if "homeworks" in response:
         list_works = response["homeworks"]
-    except KeyError:
+    else:
         logger.error("Dictionary error on homeworks key")
+        logger.critical("Dictionary critical error on homeworks key")
         raise KeyError("Dictionary error on homeworks key")
-    try:
+    if len(list_works) > 0:
         homework = list_works[0]
-    except IndexError:
+    else:
         logger.error("Homework list is empty")
+        logger.critical("Critical, homework list is empty")
         raise IndexError("Homework list is empty")
     return homework
 
 
 def parse_status(homework):
     """Parses the status of this homework."""
-    if type(homework) is dict:
-        homework_name = homework.get("homework_name")
-        homework_status = homework.get("status")
     if "homework_name" not in homework:
         raise KeyError('Missing "homework_name" key in API response')
     if "status" not in homework:
-        raise Exception('Missing "status" key in API response')
-    verdict = HOMEWORK_STATUSES.get(homework_status)
-    if homework_status not in HOMEWORK_STATUSES:
-        raise Exception(f"Unknown job status: {homework_status}")
+        raise KeyError('Missing "status" key in API response')
+    homework_name = homework.get("homework_name")
+    homework_status = homework.get("status")
+    if homework_status not in HOMEWORK_VERDICTS:
+        raise KeyError(f"Unknown job status: {homework_status}")
+    verdict = HOMEWORK_VERDICTS.get(homework_status)
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def check_tokens():
     """Checks the availability of environment variables."""
-    if PRACTICUM_TOKEN and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
         return True
     return False
 
@@ -121,7 +108,9 @@ def main():
     current_timestamp = int(time.time())
     if not check_tokens():
         logger.critical("One or more environments are missing")
-        raise Exception("One or more environments are missing")
+        raise EnvironmentsMissingException(
+            "One or more environments are missing"
+        )
     while True:
         try:
             response = get_api_answer(current_timestamp)

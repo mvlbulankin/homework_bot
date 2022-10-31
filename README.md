@@ -21,7 +21,7 @@ python -m venv env
 ```
 
 ```
-source env/bin/activate
+source venv/bin/activate
 ```
 
 ```
