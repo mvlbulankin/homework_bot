@@ -1,6 +1,10 @@
-class ErrorSendException(Exception):
+class EnvironmentsMissingException(Exception):
+    """One or more environments are missing"""
+
     pass
 
 
-class EnvironmentsMissingException(Exception):
+class NotForSend(Exception):
+    """Exception not for forwarding to telegram."""
+
     pass

@@ -1,5 +1,5 @@
 from http import HTTPStatus
-from requests import HTTPError
+from requests import HTTPError, RequestException
 import logging
 import os
 import requests
@@ -8,8 +8,8 @@ import time
 from dotenv import load_dotenv
 from telegram import Bot
 
-from exceptions import EnvironmentsMissingException, ErrorSendException
-from logger import logger
+from exceptions import EnvironmentsMissingException, NotForSend
+from setup_logging import logger
 
 
 load_dotenv()
@@ -33,11 +33,9 @@ def send_message(bot, message):
     """Sends a message to Telegram chat."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.info("Chat message {TELEGRAM_CHAT_ID}: {message}")
-    except ErrorSendException:
-        logger.error("Error sending message to telegram")
-        logger.critical("Critical error sending message to telegram")
-        raise ErrorSendException("Error sending message to telegram")
+        logger.info(f"Chat message {TELEGRAM_CHAT_ID}: {message}")
+    except RequestException:
+        raise RequestException("Error sending message to telegram")
 
 
 def get_api_answer(current_timestamp):
@@ -49,13 +47,9 @@ def get_api_answer(current_timestamp):
             ENDPOINT, headers=HEADERS, params=params
         )
     except Exception as error:
-        logging.error(f"Error requesting the main API: {error}")
-        logger.critical(f"Critical error requesting the main API: {error}")
         raise HTTPError(f"Error requesting the main API: {error}")
     if homework_statuses.status_code != HTTPStatus.OK:
         status_code = homework_statuses.status_code
-        logging.error(f"Ошибка {status_code}")
-        logger.critical(f"Critical error {status_code}")
         raise HTTPError(f"Ошибка {status_code}")
     return homework_statuses.json()
 
@@ -64,18 +58,12 @@ def check_response(response):
     """Checks the API response for correctness."""
     if not isinstance(response, dict):
         raise TypeError("API response is different from dict")
-    if "homeworks" in response:
-        list_works = response["homeworks"]
-    else:
-        logger.error("Dictionary error on homeworks key")
-        logger.critical("Dictionary critical error on homeworks key")
+    if "homeworks" not in response:
         raise KeyError("Dictionary error on homeworks key")
-    if len(list_works) > 0:
-        homework = list_works[0]
-    else:
-        logger.error("Homework list is empty")
-        logger.critical("Critical, homework list is empty")
+    list_works = response["homeworks"]
+    if len(list_works) <= 0:
         raise IndexError("Homework list is empty")
+    homework = list_works[0]
     return homework
 
 
@@ -95,9 +83,7 @@ def parse_status(homework):
 
 def check_tokens():
     """Checks the availability of environment variables."""
-    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
-        return True
-    return False
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def main():
@@ -120,6 +106,9 @@ def main():
                 send_message(bot, message)
                 status = message
             time.sleep(RETRY_TIME)
+        except NotForSend as error:
+            message = f"Program crash: {error}"
+            logging.error(message)
         except Exception as error:
             logger.error(error)
             message_error = str(error)
