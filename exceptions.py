@@ -4,7 +4,7 @@ class EnvironmentsMissingException(Exception):
     pass
 
 
-class NotForSend(Exception):
+class NotForSendException(Exception):
     """Exception not for forwarding to telegram."""
 
     pass

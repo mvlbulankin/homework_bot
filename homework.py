@@ -8,7 +8,7 @@ import time
 from dotenv import load_dotenv
 from telegram import Bot
 
-from exceptions import EnvironmentsMissingException, NotForSend
+from exceptions import EnvironmentsMissingException, NotForSendException
 from setup_logging import logger
 
 
@@ -106,7 +106,7 @@ def main():
                 send_message(bot, message)
                 status = message
             time.sleep(RETRY_TIME)
-        except NotForSend as error:
+        except NotForSendException as error:
             message = f"Program crash: {error}"
             logging.error(message)
         except Exception as error:
